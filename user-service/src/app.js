@@ -96,9 +96,13 @@ app.use('*', (req, res) => {
 // Start server
 async function startServer() {
   try {
-    // Connect to database
-    await connectDatabase();
-    console.log('✅ Database connected successfully');
+    // Connect to database (skip if in demo mode)
+    if (process.env.SKIP_DB !== 'true') {
+      await connectDatabase();
+      console.log('✅ Database connected successfully');
+    } else {
+      console.log('⚠️  Skipping database connection (demo mode)');
+    }
     
     // Start the server
     app.listen(PORT, () => {

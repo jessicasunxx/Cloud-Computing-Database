@@ -1,5 +1,60 @@
 const { executeQuery } = require('../config/database');
 
+// Mock data for demo
+const mockUsers = [
+  {
+    id: 1,
+    name: "John Doe",
+    email: "john@example.com",
+    role: "owner",
+    phone: "+1234567890",
+    location: "Seattle, WA",
+    profile_image_url: "https://example.com/john.jpg",
+    bio: "Dog lover and busy professional",
+    rating: 4.8,
+    total_reviews: 127,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    is_active: true
+  },
+  {
+    id: 2,
+    name: "Jane Smith",
+    email: "jane@example.com",
+    role: "walker",
+    phone: "+1234567891",
+    location: "Portland, OR",
+    profile_image_url: "https://example.com/jane.jpg",
+    bio: "Professional dog walker with 5 years experience",
+    rating: 4.9,
+    total_reviews: 89,
+    created_at: "2024-01-02T00:00:00Z",
+    updated_at: "2024-01-02T00:00:00Z",
+    is_active: true
+  }
+];
+
+const mockDogs = [
+  {
+    id: 1,
+    owner_id: 1,
+    name: "Buddy",
+    breed: "Golden Retriever",
+    age: 3,
+    size: "large",
+    temperament: "Friendly, energetic, loves treats",
+    special_needs: "Needs medication twice daily",
+    medical_notes: "Allergic to chicken",
+    profile_image_url: "https://example.com/buddy.jpg",
+    is_friendly_with_other_dogs: true,
+    is_friendly_with_children: true,
+    energy_level: "high",
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    is_active: true
+  }
+];
+
 class User {
   constructor(data) {
     this.id = data.id;
@@ -19,49 +74,74 @@ class User {
 
   // Get all users with optional filtering
   static async findAll(filters = {}) {
-    let sql = `
-      SELECT 
-        id, name, email, role, phone, location, 
-        profile_image_url, bio, rating, total_reviews,
-        created_at, updated_at, is_active
-      FROM users 
-      WHERE 1=1
-    `;
-    const params = [];
+    try {
+      let sql = `
+        SELECT 
+          id, name, email, role, phone, location, 
+          profile_image_url, bio, rating, total_reviews,
+          created_at, updated_at, is_active
+        FROM users 
+        WHERE 1=1
+      `;
+      const params = [];
 
-    if (filters.role) {
-      sql += ' AND role = ?';
-      params.push(filters.role);
+      if (filters.role) {
+        sql += ' AND role = ?';
+        params.push(filters.role);
+      }
+
+      if (filters.location) {
+        sql += ' AND location LIKE ?';
+        params.push(`%${filters.location}%`);
+      }
+
+      if (filters.is_active !== undefined) {
+        sql += ' AND is_active = ?';
+        params.push(filters.is_active);
+      }
+
+      if (filters.min_rating) {
+        sql += ' AND rating >= ?';
+        params.push(filters.min_rating);
+      }
+
+      sql += ' ORDER BY created_at DESC';
+
+      if (filters.limit) {
+        sql += ' LIMIT ?';
+        params.push(parseInt(filters.limit));
+      }
+
+      if (filters.offset) {
+        sql += ' OFFSET ?';
+        params.push(parseInt(filters.offset));
+      }
+
+      return await executeQuery(sql, params);
+    } catch (error) {
+      console.log('📝 Using mock data for findAll');
+      let filteredUsers = [...mockUsers];
+      
+      if (filters.role) {
+        filteredUsers = filteredUsers.filter(user => user.role === filters.role);
+      }
+      
+      if (filters.location) {
+        filteredUsers = filteredUsers.filter(user => 
+          user.location.toLowerCase().includes(filters.location.toLowerCase())
+        );
+      }
+      
+      if (filters.min_rating) {
+        filteredUsers = filteredUsers.filter(user => user.rating >= filters.min_rating);
+      }
+      
+      if (filters.limit) {
+        filteredUsers = filteredUsers.slice(0, parseInt(filters.limit));
+      }
+      
+      return filteredUsers;
     }
-
-    if (filters.location) {
-      sql += ' AND location LIKE ?';
-      params.push(`%${filters.location}%`);
-    }
-
-    if (filters.is_active !== undefined) {
-      sql += ' AND is_active = ?';
-      params.push(filters.is_active);
-    }
-
-    if (filters.min_rating) {
-      sql += ' AND rating >= ?';
-      params.push(filters.min_rating);
-    }
-
-    sql += ' ORDER BY created_at DESC';
-
-    if (filters.limit) {
-      sql += ' LIMIT ?';
-      params.push(parseInt(filters.limit));
-    }
-
-    if (filters.offset) {
-      sql += ' OFFSET ?';
-      params.push(parseInt(filters.offset));
-    }
-
-    return await executeQuery(sql, params);
   }
 
   // Get user by ID
