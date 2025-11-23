@@ -19,17 +19,12 @@ const PORT = process.env.PORT || 3001;
 app.set('trust proxy', 1);
 
 // Security middleware
-// Configure helmet to allow Swagger UI resources
+// Use default helmet config but disable upgrade-insecure-requests to prevent HTTP->HTTPS upgrade
 app.use(helmet({
   contentSecurityPolicy: {
+    useDefaults: true,
     directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.jsdelivr.net"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdn.jsdelivr.net"],
-      imgSrc: ["'self'", "data:", "https:", "http:"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com", "https://fonts.googleapis.com"],
-      connectSrc: ["'self'", "http:", "https:"],
-      frameSrc: ["'self'"]
+      upgradeInsecureRequests: null  // Disable upgrade-insecure-requests to prevent HTTP->HTTPS upgrade
     }
   },
   crossOriginOpenerPolicy: false,  // Disable COOP to avoid warnings
