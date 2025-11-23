@@ -21,10 +21,8 @@ const swaggerDefinition = {
   },
   servers: [
     {
-      url: process.env.API_BASE_URL || (process.env.NODE_ENV === 'production' 
-        ? `http://${process.env.VM_EXTERNAL_IP || 'your-vm-ip'}:${process.env.PORT || 3001}` 
-        : `http://localhost:${process.env.PORT || 3001}`),
-      description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server'
+      url: '/',  // Use relative path to automatically adapt to current host
+      description: 'Current server'
     }
   ],
   components: {
@@ -352,7 +350,7 @@ const options = {
 };
 
 // Initialize swagger-jsdoc
-const swaggerSpec = swaggerJSDoc(options);
+let swaggerSpec = swaggerJSDoc(options);
 
 // Swagger UI options
 const swaggerUiOptions = {
@@ -368,10 +366,26 @@ const swaggerUiOptions = {
   }
 };
 
-// Serve swagger.json
+// Serve swagger.json with dynamic server URL
 router.get('/swagger.json', (req, res) => {
+  // Dynamically set server URL based on request
+  const protocol = req.protocol;
+  const host = req.get('host');
+  const baseUrl = `${protocol}://${host}`;
+  
+  // Create a copy of swagger spec with dynamic server URL
+  const dynamicSpec = {
+    ...swaggerSpec,
+    servers: [
+      {
+        url: baseUrl,
+        description: 'Current server'
+      }
+    ]
+  };
+  
   res.setHeader('Content-Type', 'application/json');
-  res.send(swaggerSpec);
+  res.send(dynamicSpec);
 });
 
 // Serve swagger UI
