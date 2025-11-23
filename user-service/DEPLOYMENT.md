@@ -66,14 +66,17 @@ Set the following variables:
 ```env
 NODE_ENV=production
 PORT=3001
-DB_HOST=<your-mysql-host>
+
+DB_HOST=localhost
 DB_PORT=3306
-DB_USERNAME=<your-db-username>
-DB_PASSWORD=<your-db-password>
-DB_NAME=pawpal_db
+DB_USERNAME=user_service
+DB_PASSWORD=huakaifugui
+DB_NAME=pawpal_user_db
 DB_POOL_MAX=10
-ALLOWED_ORIGINS=http://localhost:3000,https://your-frontend-domain.com
+
+ALLOWED_ORIGINS=http://localhost:3000
 SKIP_DB=false
+
 ```
 
 ## Step 6: Setup Database (Fully Under Your Control)
@@ -125,16 +128,28 @@ sudo mysql_secure_installation
 # - Remove test database
 # - Reload privilege tables
 
-# Create database and tables (using provided schema.sql)
-mysql -u root -p < ../database/schema.sql
+# Create database user (if using custom user)
+mysql -u root -p <<EOF
+CREATE DATABASE IF NOT EXISTS pawpal_user_db;
+CREATE USER IF NOT EXISTS 'user_service'@'localhost' IDENTIFIED BY 'huakaifugui';
+GRANT ALL PRIVILEGES ON pawpal_user_db.* TO 'user_service'@'localhost';
+FLUSH PRIVILEGES;
+EOF
 
-# Load sample data (optional)
-mysql -u root -p pawpal_db < ../database/sample_data.sql
+# Create database and tables (adapting schema.sql for your database name)
+# Option 1: Use sed to replace database name in schema.sql
+sed 's/pawpal_db/pawpal_user_db/g' ../database/schema.sql | mysql -u root -p
+
+# Option 2: Or manually edit schema.sql to use pawpal_user_db, then:
+# mysql -u root -p < ../database/schema.sql
+
+# Load sample data (optional, update database name in sample_data.sql first)
+sed 's/USE pawpal_db/USE pawpal_user_db/g' ../database/sample_data.sql | mysql -u root -p
 
 # Verify database was created
-mysql -u root -p pawpal_db -e "SHOW TABLES;"
-mysql -u root -p pawpal_db -e "SELECT COUNT(*) FROM users;"
-mysql -u root -p pawpal_db -e "SELECT COUNT(*) FROM dogs;"
+mysql -u root -p pawpal_user_db -e "SHOW TABLES;"
+mysql -u root -p pawpal_user_db -e "SELECT COUNT(*) FROM users;"
+mysql -u root -p pawpal_user_db -e "SELECT COUNT(*) FROM dogs;"
 ```
 
 **Important Notes:**
@@ -291,9 +306,17 @@ sudo systemctl restart user-service
 ### Database connection issues
 
 1. Verify MySQL is running: `sudo systemctl status mysql`
-2. Test connection: `mysql -h <host> -u <user> -p`
-3. Check firewall rules
-4. Verify credentials in .env file
+2. Test connection with your configured user:
+   ```bash
+   mysql -u user_service -p pawpal_user_db
+   # Password: huakaifugui
+   ```
+3. Or test with root: `mysql -h <host> -u root -p`
+4. Check firewall rules
+5. Verify credentials in .env file match your configuration:
+   - DB_USERNAME=user_service
+   - DB_PASSWORD=huakaifugui
+   - DB_NAME=pawpal_user_db
 
 ### Port already in use
 
@@ -316,8 +339,11 @@ sudo kill -9 <PID>
 ## Backup
 
 ```bash
-# Backup database
-mysqldump -u root -p pawpal_db > backup_$(date +%Y%m%d).sql
+# Backup database (using your configured database name)
+mysqldump -u user_service -p pawpal_user_db > backup_$(date +%Y%m%d).sql
+
+# Or using root user
+mysqldump -u root -p pawpal_user_db > backup_$(date +%Y%m%d).sql
 
 # Backup application
 tar -czf user-service-backup-$(date +%Y%m%d).tar.gz /opt/pawpal/user-service

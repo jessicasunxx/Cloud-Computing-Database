@@ -74,7 +74,37 @@ if [ "$RUN_SECURE" = "y" ] || [ "$RUN_SECURE" = "Y" ]; then
 fi
 
 echo ""
-echo -e "${YELLOW}Step 7: Creating database and tables...${NC}"
+echo -e "${YELLOW}Step 7: Setting up database user and database...${NC}"
+echo "Please enter your desired database name (default: pawpal_user_db):"
+read -r DB_NAME
+DB_NAME=${DB_NAME:-pawpal_user_db}
+
+echo "Please enter your desired database username (default: user_service):"
+read -r DB_USERNAME
+DB_USERNAME=${DB_USERNAME:-user_service}
+
+echo "Please enter password for database user '$DB_USERNAME' (default: huakaifugui):"
+read -s DB_USER_PASSWORD
+DB_USER_PASSWORD=${DB_USER_PASSWORD:-huakaifugui}
+echo ""
+
+echo -e "${YELLOW}Creating database user and granting permissions...${NC}"
+$MYSQL_CMD <<EOF
+CREATE DATABASE IF NOT EXISTS ${DB_NAME};
+CREATE USER IF NOT EXISTS '${DB_USERNAME}'@'localhost' IDENTIFIED BY '${DB_USER_PASSWORD}';
+GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USERNAME}'@'localhost';
+FLUSH PRIVILEGES;
+EOF
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ Database user created and permissions granted${NC}"
+else
+    echo -e "${RED}❌ Failed to create database user${NC}"
+    exit 1
+fi
+
+echo ""
+echo -e "${YELLOW}Step 8: Creating database and tables...${NC}"
 
 # Find schema.sql file relative to script location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -86,8 +116,15 @@ if [ ! -f "$SCHEMA_FILE" ]; then
     exit 1
 fi
 
-echo "Using schema file: $SCHEMA_FILE"
-$MYSQL_CMD < "$SCHEMA_FILE" 2>&1
+# Create a temporary schema file with the correct database name
+TEMP_SCHEMA="/tmp/schema_${DB_NAME}.sql"
+sed "s/pawpal_db/${DB_NAME}/g" "$SCHEMA_FILE" > "$TEMP_SCHEMA"
+
+echo "Using schema file: $SCHEMA_FILE (adapted for database: $DB_NAME)"
+$MYSQL_CMD < "$TEMP_SCHEMA" 2>&1
+
+# Clean up temp file
+rm -f "$TEMP_SCHEMA"
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Database and tables created successfully!${NC}"
@@ -97,13 +134,17 @@ else
 fi
 
 echo ""
-echo -e "${YELLOW}Step 8: Loading sample data (optional)...${NC}"
+echo -e "${YELLOW}Step 9: Loading sample data (optional)...${NC}"
 SAMPLE_DATA_FILE="${SCRIPT_DIR}/../database/sample_data.sql"
 if [ -f "$SAMPLE_DATA_FILE" ]; then
     echo "Do you want to load sample data? (y/n)"
     read -r LOAD_SAMPLE
     if [ "$LOAD_SAMPLE" = "y" ] || [ "$LOAD_SAMPLE" = "Y" ]; then
-        $MYSQL_CMD pawpal_db < "$SAMPLE_DATA_FILE" 2>&1
+        # Update sample data file to use correct database name
+        TEMP_SAMPLE="/tmp/sample_${DB_NAME}.sql"
+        sed "s/USE pawpal_db/USE ${DB_NAME}/g" "$SAMPLE_DATA_FILE" > "$TEMP_SAMPLE"
+        $MYSQL_CMD ${DB_NAME} < "$TEMP_SAMPLE" 2>&1
+        rm -f "$TEMP_SAMPLE"
         if [ $? -eq 0 ]; then
             echo -e "${GREEN}✅ Sample data loaded successfully!${NC}"
         else
@@ -115,10 +156,10 @@ else
 fi
 
 echo ""
-echo -e "${YELLOW}Step 9: Verifying database...${NC}"
-$MYSQL_CMD pawpal_db -e "SHOW TABLES;" 2>&1
-USER_COUNT=$($MYSQL_CMD pawpal_db -e "SELECT COUNT(*) as count FROM users;" 2>&1 | tail -1)
-DOG_COUNT=$($MYSQL_CMD pawpal_db -e "SELECT COUNT(*) as count FROM dogs;" 2>&1 | tail -1)
+echo -e "${YELLOW}Step 10: Verifying database...${NC}"
+$MYSQL_CMD ${DB_NAME} -e "SHOW TABLES;" 2>&1
+USER_COUNT=$($MYSQL_CMD ${DB_NAME} -e "SELECT COUNT(*) as count FROM users;" 2>&1 | tail -1)
+DOG_COUNT=$($MYSQL_CMD ${DB_NAME} -e "SELECT COUNT(*) as count FROM dogs;" 2>&1 | tail -1)
 
 echo ""
 echo -e "${GREEN}✅ Database verification complete${NC}"
@@ -126,7 +167,7 @@ echo "  - Users table records: $USER_COUNT"
 echo "  - Dogs table records: $DOG_COUNT"
 
 echo ""
-echo -e "${YELLOW}Step 10: Generating .env configuration...${NC}"
+echo -e "${YELLOW}Step 11: Generating .env configuration...${NC}"
 ENV_FILE="${SCRIPT_DIR}/.env"
 if [ ! -f "$ENV_FILE" ]; then
     if [ -f "${SCRIPT_DIR}/config/database.env.example" ]; then
@@ -137,9 +178,9 @@ NODE_ENV=production
 PORT=3001
 DB_HOST=localhost
 DB_PORT=3306
-DB_USERNAME=root
-DB_PASSWORD=${MYSQL_ROOT_PASSWORD}
-DB_NAME=pawpal_db
+DB_USERNAME=${DB_USERNAME}
+DB_PASSWORD=${DB_USER_PASSWORD}
+DB_NAME=${DB_NAME}
 DB_POOL_MAX=10
 ALLOWED_ORIGINS=http://localhost:3000
 SKIP_DB=false
@@ -147,16 +188,17 @@ EOF
     fi
     echo -e "${GREEN}✅ .env file created${NC}"
     
-    # Update password in .env if it was set
-    if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
-        sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${MYSQL_ROOT_PASSWORD}/" "$ENV_FILE"
-        echo -e "${GREEN}✅ Database password written to .env file${NC}"
-    fi
+    # Update database configuration in .env
+    sed -i "s/DB_USERNAME=.*/DB_USERNAME=${DB_USERNAME}/" "$ENV_FILE"
+    sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${DB_USER_PASSWORD}/" "$ENV_FILE"
+    sed -i "s/DB_NAME=.*/DB_NAME=${DB_NAME}/" "$ENV_FILE"
+    echo -e "${GREEN}✅ Database configuration written to .env file${NC}"
 else
-    echo -e "${YELLOW}⚠️  .env file already exists, please manually update DB_PASSWORD${NC}"
-    if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
-        echo "Suggested DB_PASSWORD value: $MYSQL_ROOT_PASSWORD"
-    fi
+    echo -e "${YELLOW}⚠️  .env file already exists${NC}"
+    echo "Please manually update the following in .env:"
+    echo "  DB_USERNAME=${DB_USERNAME}"
+    echo "  DB_PASSWORD=${DB_USER_PASSWORD}"
+    echo "  DB_NAME=${DB_NAME}"
 fi
 
 echo ""
@@ -165,9 +207,9 @@ echo -e "${GREEN}✅ MySQL database setup complete!${NC}"
 echo "=========================================="
 echo ""
 echo "Database Information:"
-echo "  - Database name: pawpal_db"
-echo "  - Username: root"
-echo "  - Password: ${MYSQL_ROOT_PASSWORD:-（not set）}"
+echo "  - Database name: ${DB_NAME}"
+echo "  - Username: ${DB_USERNAME}"
+echo "  - Password: ${DB_USER_PASSWORD}"
 echo "  - Host: localhost"
 echo "  - Port: 3306"
 echo ""
