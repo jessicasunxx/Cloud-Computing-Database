@@ -6,35 +6,12 @@ This guide explains how to deploy the User Service on Google Cloud Compute Engin
 
 - Google Cloud Platform account
 - gcloud CLI installed and configured
-- MySQL database (can be on the same VM or separate VM)
+- MySQL database (will be set up on the same VM, fully under your control)
 
 ## Step 1: Create VM Instance
 
-```bash
-# Create VM instance
-gcloud compute instances create user-service-vm \
-  --zone=us-central1-a \
-  --machine-type=e2-medium \
-  --image-family=ubuntu-2204-lts \
-  --image-project=ubuntu-os-cloud \
-  --boot-disk-size=20GB \
-  --tags=http-server,https-server
-
-# Allow HTTP traffic
-gcloud compute firewall-rules create allow-http \
-  --allow tcp:80 \
-  --source-ranges 0.0.0.0/0 \
-  --target-tags http-server
-
-# Allow custom port (if not using 80)
-gcloud compute firewall-rules create allow-user-service \
-  --allow tcp:3001 \
-  --source-ranges 0.0.0.0/0 \
-  --target-tags http-server
-```
 
 ## Step 2: SSH into VM
-
 
 
 ## Step 3: Install Dependencies on VM
@@ -49,7 +26,7 @@ curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
 # Install MySQL client (if needed)
-sudo apt-get install -y mysql-client
+sudo apt-get install -y default-mysql-server default-mysql-client
 
 # Install PM2 for process management
 sudo npm install -g pm2
@@ -99,9 +76,34 @@ ALLOWED_ORIGINS=http://localhost:3000,https://your-frontend-domain.com
 SKIP_DB=false
 ```
 
-## Step 6: Setup Database
+## Step 6: Setup Database (Fully Under Your Control)
 
-If MySQL is on the same VM:
+If MySQL is on the same VM, you have two options:
+
+### Option A: Automated Setup (Recommended)
+
+Use the automated setup script that handles everything:
+
+```bash
+cd /opt/pawpal/user-service
+chmod +x setup-mysql.sh
+sudo ./setup-mysql.sh
+```
+
+The script will automatically:
+- Install MySQL Server
+- Start and enable MySQL service
+- Prompt you to set root password (you decide the password)
+- Optionally run security configuration
+- Create database and tables (using the provided schema.sql)
+- Optionally load sample data
+- Generate .env file with your password configured
+
+**This gives you complete control over the MySQL setup while automating the process.**
+
+### Option B: Manual Setup
+
+If you prefer to control each step manually:
 
 ```bash
 # Install MySQL Server
@@ -117,13 +119,13 @@ sudo systemctl status mysql
 # Secure MySQL installation (optional but recommended)
 sudo mysql_secure_installation
 # Follow the prompts to:
-# - Set root password
+# - Set root password (you decide)
 # - Remove anonymous users
 # - Disallow root login remotely (optional, since we're on same VM)
 # - Remove test database
 # - Reload privilege tables
 
-# Create database and tables
+# Create database and tables (using provided schema.sql)
 mysql -u root -p < ../database/schema.sql
 
 # Load sample data (optional)
@@ -131,7 +133,15 @@ mysql -u root -p pawpal_db < ../database/sample_data.sql
 
 # Verify database was created
 mysql -u root -p pawpal_db -e "SHOW TABLES;"
+mysql -u root -p pawpal_db -e "SELECT COUNT(*) FROM users;"
+mysql -u root -p pawpal_db -e "SELECT COUNT(*) FROM dogs;"
 ```
+
+**Important Notes:**
+- You have full control over the MySQL root password
+- The `schema.sql` file is provided by others, but you execute it
+- All database configuration is under your control
+- Update `.env` file with the password you set
 
 If MySQL is on a separate VM, ensure:
 - MySQL allows remote connections
