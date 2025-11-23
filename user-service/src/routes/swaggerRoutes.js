@@ -408,14 +408,35 @@ router.get('/swagger.json', (req, res) => {
 });
 
 // Serve swagger UI with dynamic spec
+// Use a function to dynamically generate the setup with correct base URL
 router.use('/', swaggerUi.serve);
-router.get('/', swaggerUi.setup(swaggerSpec, {
-  ...swaggerUiOptions,
-  swaggerOptions: {
-    ...swaggerUiOptions.swaggerOptions,
-    url: '/api-docs/swagger.json'  // Point to the dynamic swagger.json endpoint
-  }
-}));
+router.get('/', (req, res, next) => {
+  const protocol = req.protocol || 'http';
+  const host = req.get('host');
+  const baseUrl = `${protocol}://${host}`;
+  
+  // Create dynamic spec with correct server URL
+  const dynamicSpec = {
+    ...swaggerSpec,
+    servers: [
+      {
+        url: baseUrl,
+        description: 'Current server'
+      }
+    ]
+  };
+  
+  // Setup Swagger UI with dynamic spec
+  const swaggerUiHandler = swaggerUi.setup(dynamicSpec, {
+    ...swaggerUiOptions,
+    swaggerOptions: {
+      ...swaggerUiOptions.swaggerOptions,
+      url: `${baseUrl}/api-docs/swagger.json`  // Use full URL for swagger.json
+    }
+  });
+  
+  swaggerUiHandler(req, res, next);
+});
 
 // Additional documentation endpoints
 router.get('/health', (req, res) => {
